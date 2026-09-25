@@ -63,6 +63,38 @@ Xatw -listmodes               # the modes this card offers; safe while X runs
 Xatw :0 -mode 1024x768 -depth 32 &   # 24-bit colour (4 MB card)
 ```
 
+### Two servers, Ctrl+Alt+F1..F9
+
+Atari System V has no virtual terminals for the card, so switchable
+servers arrange it among themselves (`hw/atw/atwVt.c`): each is started
+with `-vt N` and its own `-fboffset` (where its screen sits in video
+memory), and Ctrl+Alt+F`N` switches, as under XFree86. A server keeps
+drawing into its own screen while hidden, so a switch copies and redraws
+nothing: the one taking over sets its mode and display start and loads its
+colours. Only the server on show touches the hardware - the registers, the
+LUT, the 2D engine and `/dev/ikbd`; the others draw with the CPU. The
+servers find each other through `/tmp/.atwvt` (which is on show) and
+`/tmp/.atwvtN` (server N's pid), and pass the card on with SIGUSR2. A
+server that exits while on show hands the card back to the one it took it
+from.
+
+The display start is in bytes and is taken only as the timing generator
+goes from off to on (measured with `tools/atw/atwstart`; writing it alone
+does nothing), so each switch blanks the screen for a moment.
+
+```sh
+# xdm's Xservers: the desktop as F1
+noname:0 local /usr/x11r6/bin/Xatw :0 -mode 1024x768 -vt 1
+# a game full screen at 640x480 as F2, the server gone when it exits
+xatwrun -mode 640x480 /work/openua/openua
+```
+
+`xatwrun.sh` starts the second server 1 MB into video memory (clear of a
+1024x768 desktop and its 2D-engine fill source, which follows each screen).
+Tested in Hatari: switching both ways with the screens intact (an `xclock`
+kept drawing on the hidden one), the keyboard back on F1 afterwards, and
+the card handed back when the F2 server exits.
+
 ### Modes and the 4 MB card
 
 Built in are the VESA 60 Hz modes 640x480, 800x600, 1024x768 and

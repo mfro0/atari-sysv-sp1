@@ -22,7 +22,9 @@
  * the CPU over the VME bus.
  *
  * cfb calls in through cfbScreenBlitHook / cfbScreenFillHook (cfb.h):
- * window drawables only, GXcopy, all planes.
+ * window drawables only, GXcopy, all planes. Only while this server is
+ * the one on show (atwVt.c): the engine is shared, so a server in the
+ * background draws with the CPU.
  */
 #include "atw.h"
 #include "regionstr.h"
@@ -124,8 +126,8 @@ atwScreenBlit(pSrc, pDst, prgnDst, pptSrc)
 	DDXPointPtr p = &pptSrc[atwOrder[j]];
 	int	w = (b->x2 - b->x1) * atwBpp;
 	int	h = b->y2 - b->y1;
-	unsigned long s = p->y * atwPitch + p->x * atwBpp;
-	unsigned long d = b->y1 * atwPitch + b->x1 * atwBpp;
+	unsigned long s = atwScreen.fboff + p->y * atwPitch + p->x * atwBpp;
+	unsigned long d = atwScreen.fboff + b->y1 * atwPitch + b->x1 * atwBpp;
 
 	if (w <= 0 || h <= 0)
 	    continue;
@@ -168,16 +170,17 @@ atwScreenFill(pDrawable, nBox, pBox, fill)
 	int h = pBox[i].y2 - pBox[i].y1;
 
 	if (w > 0 && h > 0)
-	    atwBlit(atwPatOff, pBox[i].y1 * atwPitch + pBox[i].x1 * atwBpp,
+	    atwBlit(atwPatOff, atwScreen.fboff + pBox[i].y1 * atwPitch
+		    + pBox[i].x1 * atwBpp,
 		    0, (int)atwPitch, w, h, 5);
     }
     return TRUE;
 }
 
 /*
- * After the screen is set up. The fill source goes in the 8 KB below the
- * LUT, clear of the frame buffer in every mode that leaves room; a mode
- * whose frame buffer reaches it gets copies only.
+ * After the screen is set up. The fill source is the 64 bytes after our
+ * frame buffer (-fboffset gives each switchable server its own screen,
+ * so each has its own), if that is clear of the LUT; if not, copies only.
  */
 void
 atwAccelInit(m)
@@ -185,18 +188,27 @@ atwAccelInit(m)
 {
     unsigned long fbend;
 
-    cfbScreenBlitHook = NULL;
-    cfbScreenFillHook = NULL;
-    if (atwNoAccel)
-	return;
     atwBpp = m->bpp / 8;
     atwPitch = (long)m->width * atwBpp;
-    fbend = (unsigned long)atwPitch * m->height;
-    atwPatOff = atwScreen.size - 0x2000;
-    if (fbend > atwPatOff)
+    fbend = atwScreen.fboff + (unsigned long)atwPitch * m->height;
+    atwPatOff = (fbend + 63) & ~63UL;
+    if (atwPatOff + 64 > ATW_FB_MAX)
 	atwPatOff = 0;
     atwPatValid = FALSE;
+    atwAccelOn();
+    ErrorF("atw: 2D engine: copies%s\n", atwPatOff ? " and fills" : "");
+}
+
+/* The hooks in while we are on show, out otherwise (and with -noaccel). */
+void
+atwAccelOn()
+{
+    if (atwNoAccel || !atwScreen.active) {
+	cfbScreenBlitHook = NULL;
+	cfbScreenFillHook = NULL;
+	return;
+    }
+    atwPatValid = FALSE;	/* its bytes may have been drawn over */
     cfbScreenBlitHook = atwScreenBlit;
     cfbScreenFillHook = atwScreenFill;
-    ErrorF("atw: 2D engine: copies%s\n", atwPatOff ? " and fills" : "");
 }

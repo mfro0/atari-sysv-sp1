@@ -7,6 +7,9 @@
  * on release. 0xF8..0xFB start a 3-byte relative mouse packet: header
  * bits 0-1 are the right/left buttons, then dx, dy as signed bytes. The
  * other 0xF6..0xFF headers carry fixed-length reports we skip.
+ *
+ * With -vt, Ctrl+Alt+F1..F9 switches to another server (atwVt.c) and
+ * never reaches the clients; /dev/ikbd is open only while we are on show.
  */
 #include <stdio.h>
 #include <fcntl.h>
@@ -27,6 +30,13 @@ long	atwLastEventTime;
 static DevicePtr atwPointer, atwKeyboard;
 static int	 atwDx, atwDy;		/* motion not yet delivered */
 static int	 atwButtons;		/* IKBD button bits last seen */
+static unsigned char atwDown[128];	/* keys the clients were told are down */
+static unsigned char atwEaten[128];	/* a switch key: eat its release too */
+
+#define SC_CTRL		0x1D		/* IKBD scan codes */
+#define SC_ALT		0x38
+#define SC_F1		0x3B
+#define SC_F9		0x43
 
 static void atwFlushMotion();
 
@@ -138,7 +148,8 @@ atwKbdProc(pDev, what)
 {
     switch (what) {
     case DEVICE_INIT:
-	if (atwIkbdFd < 0) {
+	/* in the background the server on show has the device */
+	if (atwIkbdFd < 0 && atwScreen.active) {
 	    atwIkbdFd = open("/dev/ikbd", O_RDONLY | O_NDELAY);
 	    if (atwIkbdFd < 0) {
 		ErrorF("atw: cannot open /dev/ikbd (errno %d)\n", errno);
@@ -152,15 +163,43 @@ atwKbdProc(pDev, what)
 	break;
     case DEVICE_ON:
 	pDev->on = TRUE;
-	AddEnabledDevice(atwIkbdFd);
+	if (atwIkbdFd >= 0)
+	    AddEnabledDevice(atwIkbdFd);
 	break;
     case DEVICE_OFF:
     case DEVICE_CLOSE:
 	pDev->on = FALSE;
-	RemoveEnabledDevice(atwIkbdFd);
+	if (atwIkbdFd >= 0)
+	    RemoveEnabledDevice(atwIkbdFd);
 	break;
     }
     return Success;
+}
+
+/* On show (atwVt.c): the keyboard and mouse are ours. */
+void
+atwInputOn()
+{
+    if (atwIkbdFd < 0) {
+	atwIkbdFd = open("/dev/ikbd", O_RDONLY | O_NDELAY);
+	if (atwIkbdFd < 0) {
+	    ErrorF("atw: cannot open /dev/ikbd (errno %d)\n", errno);
+	    return;
+	}
+    }
+    if (atwKeyboard && atwKeyboard->on)
+	AddEnabledDevice(atwIkbdFd);
+}
+
+/* ... and now the next server's. */
+void
+atwInputOff()
+{
+    if (atwIkbdFd < 0)
+	return;
+    RemoveEnabledDevice(atwIkbdFd);
+    close(atwIkbdFd);
+    atwIkbdFd = -1;
 }
 
 Bool
@@ -202,8 +241,26 @@ static void
 atwKey(code)
     int code;
 {
+    static int ctrl, alt;
+    int sc = code & 0x7f, up = code & 0x80;
     xEvent xE;
 
+    if (sc == SC_CTRL)
+	ctrl = !up;
+    else if (sc == SC_ALT)
+	alt = !up;
+    if (atwScreen.vt && sc >= SC_F1 && sc <= SC_F9) {
+	if (!up && ctrl && alt) {
+	    atwEaten[sc] = 1;
+	    atwVtSwitch(sc - SC_F1 + 1);
+	    return;
+	}
+	if (up && atwEaten[sc]) {
+	    atwEaten[sc] = 0;
+	    return;
+	}
+    }
+    atwDown[sc] = !up;
     atwFlushMotion();
     xE.u.u.type = (code & 0x80) ? KeyRelease : KeyPress;
     xE.u.u.detail = (code & 0x7f) + MIN_KEYCODE;
@@ -230,6 +287,27 @@ atwMousePacket(hdr, dx, dy)
     if ((b ^ atwButtons) & 1)
 	atwButton(3, b & 1);
     atwButtons = b;
+}
+
+/* Leaving the screen: release, to the clients, every key and button they
+ * were told is down - their real releases will go to the next server. */
+int
+atwKeysReleaseAll()
+{
+    int sc, n = 0;
+
+    for (sc = 0; sc < 128; sc++)
+	if (atwDown[sc]) {
+	    atwKey(sc | 0x80);
+	    n++;
+	}
+    if (atwButtons & 2)
+	atwButton(1, 0);
+    if (atwButtons & 1)
+	atwButton(3, 0);
+    atwButtons = 0;
+    atwDx = atwDy = 0;
+    return n;
 }
 
 void

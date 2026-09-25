@@ -1,9 +1,11 @@
 /*
  * atwInit.c - screen side of the ATW800/2 ddx (X11R6.3): map the card, set the
  * mode, hand the framebuffer to cfb, keep the hardware LUT in step with
- * the installed colormap.
+ * the installed colormap - while this server is the one on show (see
+ * atwVt.c: in the background it draws, but never touches the hardware).
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -171,7 +173,19 @@ atwMapCard()
 	ErrorF("atw: cannot open /dev/mem (errno %d)\n", errno);
 	return FALSE;
     }
-    if (atwMapAt(fd, ATW_PHYS_A, ATW_4MB)) {
+    if (!atwScreen.active && atwMapAt(fd, ATW_PHYS_A, ATW_4MB)) {
+	/* Another server is on show: finding the size by switching the
+	 * layout would pull its picture from under it. Read which layout
+	 * it runs instead: the id block sits at the top of the 2 MB only
+	 * in the 2 MB layout (and is mirrored at the 4 MB top). */
+	if (CARDL(ATW_2MB - 0xE00 + 24) == ATW_ID) {
+	    atwScreen.size = ATW_2MB;
+	    atwScreen.memreg = 1;
+	} else {
+	    atwScreen.size = ATW_4MB;
+	    atwScreen.memreg = 3;
+	}
+    } else if (atwMapAt(fd, ATW_PHYS_A, ATW_4MB)) {
 	atwScreen.size = ATW_2MB;
 	CARDW(ATW_2MB - 0x800 + ATW_R_MEM) = 1;
 	CARDW(ATW_4MB - 0x800 + ATW_R_MEM) = 1;
@@ -227,17 +241,13 @@ atwSetMode(m)
     REGW(ATW_R_VSY) = m->vsy;
     REGW(ATW_R_VBP) = m->vbp;
     REGW(ATW_R_VDI) = m->height;
-    REGW(ATW_R_VMLO) = 0;
-    REGW(ATW_R_VMHI) = 0;
+    /* the display start, in bytes - taken only as the VTG goes from off
+     * to on, as here (measured on a V0205 card) */
+    REGW(ATW_R_VMLO) = (unsigned short)(atwScreen.fboff & 0xFFFF);
+    REGW(ATW_R_VMHI) = (unsigned short)(atwScreen.fboff >> 16);
     REGW(ATW_R_CTRL) = m->ctrl;
 }
 
-static void
-atwVideoOff()
-{
-    if (atwScreen.fb)
-	REGW(ATW_R_CTRL) = 0;
-}
 
 /*
  * Colormap: PseudoColor, 256 entries, written straight into the LUT.
@@ -253,6 +263,8 @@ atwUpdateColormap(cmap, first, n)
 
     if (cmap->pVisual->class != PseudoColor)
 	return;			/* 32 bpp: the pixels are the colours */
+    if (!atwScreen.active)
+	return;			/* the LUT is the server on show's */
 
     for (i = first, pent = &cmap->red[first]; i < first + n; i++, pent++) {
 	if (pent->fShared) {
@@ -322,6 +334,40 @@ atwStoreColors(pmap, ndef, pdefs)
 	atwUpdateColormap(pmap, (int)pdefs[i].pixel, 1);
 }
 
+/*
+ * Take the card (atwVt.c): our mode, our display start, our colours, the
+ * 2D engine and the keyboard and mouse. Our screen needs no redraw - it
+ * was drawn into all along.
+ */
+void
+atwActivate()
+{
+    int i;
+
+    atwScreen.active = 1;
+    atwSetMode(atwScreen.mode);
+    if (atwScreen.installedMap)
+	atwUpdateColormap(atwScreen.installedMap, 0,
+			  atwScreen.installedMap->pVisual->ColormapEntries);
+    else
+	for (i = 0; i < 256; i++)
+	    LUTW(i) = 0;
+    atwAccelOn();
+    atwInputOn();
+}
+
+/* Let go of it: keys and buttons held are released to the clients (the
+ * releases themselves will go to the next server), then the input and
+ * the 2D engine. The registers are left for the next server to set. */
+void
+atwDeactivate()
+{
+    atwKeysReleaseAll();
+    atwInputOff();
+    atwScreen.active = 0;
+    atwAccelOn();		/* with active clear: the CPU draws */
+}
+
 static Bool
 atwSaveScreen(pScreen, on)
     ScreenPtr	pScreen;
@@ -358,6 +404,7 @@ atwBlockHandler(index, blockData, pTimeout, pReadmask)
     int		index;
     pointer	blockData, pTimeout, pReadmask;
 {
+    atwVtPoll(pTimeout);
 }
 
 static void
@@ -372,6 +419,7 @@ atwWakeupHandler(index, blockData, result, pReadmask)
     if ((long)result > 0 && atwIkbdFd >= 0 &&
 	(mask[atwIkbdFd / 32] & (1L << (atwIkbdFd % 32))))
 	atwReadInput();
+    atwVtPoll((pointer)0);
 }
 
 static Bool
@@ -382,12 +430,14 @@ atwScreenInit(index, pScreen, argc, argv)
     char	**argv;
 {
     atwModeRec *m = atwScreen.mode;
+    pointer fb = (pointer)(atwScreen.fb + atwScreen.fboff);
 
-    atwSetMode(m);
-    /* the LUT is whatever the last program left: black until a colormap
-     * is installed avoids a splash of the wrong colours */
-    {
+    if (atwScreen.active) {
 	int i;
+
+	atwSetMode(m);
+	/* the LUT is whatever the last program left: black until a
+	 * colormap is installed avoids a splash of the wrong colours */
 	for (i = 0; i < 256; i++)
 	    LUTW(i) = 0;
     }
@@ -407,7 +457,7 @@ atwScreenInit(index, pScreen, argc, argv)
 	if (!cfbSetVisualTypes(1, 0, 8) ||
 	    !cfbSetVisualTypes(32, 1 << TrueColor, 8))
 	    return FALSE;
-	if (!cfb32ScreenInit(pScreen, (pointer)atwScreen.fb, m->width,
+	if (!cfb32ScreenInit(pScreen, fb, m->width,
 			     m->height, 75, 75, m->width))
 	    return FALSE;
 	/* The card's 32 bpp pixel is the bytes R, G, B, x (measured on a
@@ -422,7 +472,7 @@ atwScreenInit(index, pScreen, argc, argv)
 		v->bitsPerRGBValue = 8;
 		v->ColormapEntries = 256;
 	    }
-    } else if (!cfbScreenInit(pScreen, (pointer)atwScreen.fb, m->width,
+    } else if (!cfbScreenInit(pScreen, fb, m->width,
 			      m->height, 75, 75, m->width))
 	return FALSE;
 
@@ -445,6 +495,7 @@ InitOutput(pScreenInfo, argc, argv)
 {
     int i;
 
+    atwVtInit();		/* before the card: are we on show? */
     if (!atwScreen.fb && !atwMapCard())
 	FatalError("atw: no ATW800/2 found\n");
     if (!atwScreen.mode) {
@@ -455,9 +506,11 @@ InitOutput(pScreenInfo, argc, argv)
 	if (!m)
 	    FatalError("atw: no mode %dx%d at %d bpp (-listmodes shows them)\n",
 		       atwWantW, atwWantH, atwWantBpp);
-	if ((unsigned long)m->width * m->height * m->bpp / 8 > ATW_FB_MAX)
-	    FatalError("atw: %s at %d bpp needs more than the card's %d MB\n",
-		       m->name, m->bpp, (int)(atwScreen.size >> 20));
+	if (atwScreen.fboff + (unsigned long)m->width * m->height * m->bpp / 8
+	    > ATW_FB_MAX)
+	    FatalError("atw: %s at %d bpp%s needs more than the card's %d MB\n",
+		       m->name, m->bpp, atwScreen.fboff ? " at that -fboffset" : "",
+		       (int)(atwScreen.size >> 20));
 	atwScreen.mode = m;
     }
     formats[1].depth = formats[1].bitsPerPixel = atwScreen.mode->bpp;
@@ -501,13 +554,13 @@ OsVendorInit()
 void
 AbortDDX()
 {
-    atwVideoOff();
+    atwVtExit();
 }
 
 void
 ddxGiveUp()
 {
-    atwVideoOff();
+    atwVtExit();
 }
 
 /*
@@ -537,6 +590,9 @@ atwListModesExit()
  * -depth N        its bits per pixel: 8 (the default) or 32
  * -noaccel        draw everything with the CPU (no 2D engine)
  * -listmodes      print the modes and exit
+ * -vt N           switchable with other servers: this is Ctrl+Alt+FN
+ * -fboffset B     our screen starts B bytes into video memory (so that
+ *                 switchable servers each have their own)
  */
 int
 ddxProcessArgument(argc, argv, i)
@@ -559,6 +615,19 @@ ddxProcessArgument(argc, argv, i)
 	atwNoAccel = 1;
 	return 1;
     }
+    if (strcmp(argv[i], "-vt") == 0 && i + 1 < argc) {
+	atwScreen.vt = atoi(argv[i + 1]);
+	if (atwScreen.vt < 1 || atwScreen.vt > 9) {
+	    ErrorF("atw: -vt wants 1 to 9\n");
+	    return 0;
+	}
+	return 2;
+    }
+    if (strcmp(argv[i], "-fboffset") == 0 && i + 1 < argc) {
+	/* a multiple of 64: the 2D engine's fill source follows the screen */
+	atwScreen.fboff = strtoul(argv[i + 1], (char **)0, 0) & ~63UL;
+	return 2;
+    }
     if (strcmp(argv[i], "-listmodes") == 0) {
 	atwListModesExit();
 	return 1;
@@ -573,4 +642,6 @@ ddxUseMsg()
     ErrorF("-depth N               bits per pixel, 8 or 32 (8)\n");
     ErrorF("-noaccel               no 2D engine: the CPU draws everything\n");
     ErrorF("-listmodes             list the modes and exit\n");
+    ErrorF("-vt N                  switchable with Ctrl+Alt+F1..F9: this is FN\n");
+    ErrorF("-fboffset B            the screen starts B bytes into video memory\n");
 }

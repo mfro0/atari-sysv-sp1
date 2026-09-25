@@ -71,6 +71,9 @@ typedef struct {
     int		memreg;			/* register 15 value for that layout */
     atwModeRec	*mode;
     ColormapPtr	installedMap;
+    unsigned long fboff;		/* -fboffset: where our screen is in VRAM */
+    int		vt;			/* -vt: our number, 0 = no switching */
+    int		active;			/* we own the display, LUT, 2D engine, input */
 } atwScreenRec;
 
 extern atwScreenRec atwScreen;
@@ -86,7 +89,13 @@ extern void atwReadInput();
 extern miPointerScreenFuncRec atwPointerScreenFuncs;
 
 extern int  atwNoAccel;
-extern void atwAccelInit();
+extern void atwAccelInit(), atwAccelOn();
+
+/* atwVt.c: switching the card between servers (Ctrl+Alt+F1..F9) */
+extern void atwVtInit(), atwVtPoll(), atwVtSwitch(), atwVtExit();
+extern void atwActivate(), atwDeactivate();	/* atwInit.c */
+extern void atwInputOn(), atwInputOff();	/* atwIo.c */
+extern int  atwKeysReleaseAll();
 
 /* IKBD packet codes */
 #define IKBD_RELMOUSE	0xF8		/* 0xF8..0xFB: buttons in bits 0-1 */
