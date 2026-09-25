@@ -369,6 +369,57 @@ pc_in(n)
 #define SCRATCH		(2 * UC_SIZE)
 #define BUFSZ		(UTS_FIELDS * AMX_NMLN + 3)
 
+/*
+ * The contexts signals delivered. sendsig builds the handler's ucontext in
+ * ASV's layout and AMIX's libc returns from every sigaction handler with
+ * setcontext() on it (sigacthandler); converted as if it were AMIX's, the
+ * registers came back shifted by two, and a program taking timer signals
+ * (OpenUA's sound) went wrong in its data. The end of the structure holds
+ * the checksummed exception frame, so the context is not tagged: its
+ * address is remembered here instead, per process, until it comes back.
+ */
+#define AMX_NUC		64
+static struct {
+	struct proc	*p;
+	caddr_t		uc;
+} amx_uctab[AMX_NUC];
+static int amx_ucnext;
+
+static void
+amx_uctake(p, uc)
+	struct proc *p;
+	caddr_t uc;
+{
+	register int i;
+
+	for (i = 0; i < AMX_NUC; i++)		/* a free slot, else the oldest */
+		if (amx_uctab[i].p == 0)
+			break;
+	if (i == AMX_NUC) {
+		i = amx_ucnext;
+		amx_ucnext = (amx_ucnext + 1) % AMX_NUC;
+	}
+	amx_uctab[i].p = p;
+	amx_uctab[i].uc = uc;
+}
+
+/* 1 if uc is a context a signal delivered to p (and forget it) */
+static int
+amx_ucgive(p, uc)
+	struct proc *p;
+	caddr_t uc;
+{
+	register int i;
+
+	for (i = 0; i < AMX_NUC; i++)
+		if (amx_uctab[i].p == p && amx_uctab[i].uc == uc) {
+			amx_uctab[i].p = 0;
+			amx_uctab[i].uc = 0;
+			return 1;
+		}
+	return 0;
+}
+
 static int
 amx_trap0(fp)
 	int *fp;			/* the trap's stack frame: d0-d7, a0-a7 */
@@ -499,6 +550,10 @@ amx_trap0(fp)
 			args[1] = (int)tmp;
 			post = POST_CONTEXT;
 		} else if (args[0] == 1) {
+			/* the context a signal delivered is in ASV's layout
+			 * already (see amx_sendsig): hand it back as it is */
+			if (amx_ucgive(u.u_procp, (caddr_t)args[1]))
+				break;
 			if (copyin((caddr_t)args[1], abuf, UC_SIZE)) {
 				err = EFAULT;
 				break;
@@ -649,7 +704,8 @@ done:
  * signal number (it needs it for its own bookkeeping), then the arguments
  * the AMIX handler sees are fixed up: at the new user stack pointer are the
  * return address (the copied sigtramp), sig, siginfo * and ucontext *. The
- * ucontext stays in ASV's layout: sigtramp hands it back to the kernel. */
+ * ucontext stays in ASV's layout: sigtramp hands it back to the kernel, and
+ * so does AMIX's libc, through setcontext (amx_uctake / amx_ucgive). */
 static int
 amx_sendsig(sig, sip, hdlr)
 	int sig;
@@ -663,6 +719,7 @@ amx_sendsig(sig, sip, hdlr)
 		return rv;
 	usp = u.u_ar0->regs[USP];
 	(void) suword((int *)(usp + 4), sig_out(sig));
+	amx_uctake(u.u_procp, (caddr_t)fuword((int *)(usp + 12)));
 	info = fuword((int *)(usp + 8));
 	if (info != 0 && info != -1 && copyin((caddr_t)info, (caddr_t)k, 128) == 0) {
 		si_out(k, a);
