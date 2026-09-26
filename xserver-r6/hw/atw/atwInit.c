@@ -18,6 +18,10 @@
 #include "colormapst.h"
 #include "resource.h"
 #include "mi.h"
+#include "Xatom.h"
+#include "windowstr.h"
+#include "cursorstr.h"
+#include "propertyst.h"
 
 extern int TellLostMap(), TellGainedMap();
 extern Bool cfbScreenInit(), cfb32ScreenInit(), cfbSetVisualTypes(), cfbCreateDefColormap();
@@ -151,6 +155,7 @@ atwMapAt(fd, phys, size)
     if (p == (char *)-1)
 	return FALSE;
     atwScreen.fb = (volatile unsigned char *)p;
+    atwScreen.phys = phys;
     atwScreen.size = size;
     return TRUE;
 }
@@ -368,6 +373,62 @@ atwDeactivate()
     atwAccelOn();		/* with active clear: the CPU draws */
 }
 
+/*
+ * _ATW_FRAMEBUFFER on the root window: where this screen is, for a client
+ * that draws into the card itself (OpenUA's full-screen window). CARD32s:
+ * physical address and size of the card window, offset of our screen in
+ * it, bytes per line, width, height, bits per pixel, -vt number. Set
+ * again whenever there is a new root (a server reset).
+ */
+extern WindowPtr *WindowTable;		/* dix: each screen's root */
+
+static void
+atwPublish()
+{
+    static WindowPtr done;
+    CARD32 v[8];
+    atwModeRec *m = atwScreen.mode;
+
+    if (WindowTable[0] == NullWindow || WindowTable[0] == done)
+	return;
+    done = WindowTable[0];
+    v[0] = atwScreen.phys;
+    v[1] = atwScreen.size;
+    v[2] = atwScreen.fboff;
+    v[3] = m->width * (m->bpp / 8);
+    v[4] = m->width;
+    v[5] = m->height;
+    v[6] = m->bpp;
+    v[7] = atwScreen.vt;
+    ChangeWindowProperty(WindowTable[0], MakeAtom("_ATW_FRAMEBUFFER", 16, TRUE),
+			 XA_INTEGER, 32, PropModeReplace, 8L, (pointer)v, FALSE);
+}
+
+/*
+ * A cursor with an empty mask shows nothing, but mi's software sprite
+ * would still save and restore the pixels under it at every move - over
+ * what a client drawing into the card itself has put there since. So an
+ * invisible cursor is no cursor at all.
+ */
+static Bool (*atwMiDisplayCursor)();
+
+static Bool
+atwDisplayCursor(pScreen, pCursor)
+    ScreenPtr	pScreen;
+    CursorPtr	pCursor;
+{
+    if (pCursor && pCursor->bits->mask) {
+	long n = (long)BitmapBytePad(pCursor->bits->width) * pCursor->bits->height;
+	unsigned char *p = pCursor->bits->mask;
+
+	while (n > 0 && *p == 0)
+	    n--, p++;
+	if (n == 0)
+	    pCursor = NullCursor;
+    }
+    return (*atwMiDisplayCursor)(pScreen, pCursor);
+}
+
 static Bool
 atwSaveScreen(pScreen, on)
     ScreenPtr	pScreen;
@@ -404,6 +465,7 @@ atwBlockHandler(index, blockData, pTimeout, pReadmask)
     int		index;
     pointer	blockData, pTimeout, pReadmask;
 {
+    atwPublish();
     atwVtPoll(pTimeout);
 }
 
@@ -481,6 +543,8 @@ atwScreenInit(index, pScreen, argc, argv)
 
     if (!miDCInitialize(pScreen, &atwPointerScreenFuncs))
 	return FALSE;
+    atwMiDisplayCursor = pScreen->DisplayCursor;
+    pScreen->DisplayCursor = atwDisplayCursor;
 
     atwScreen.installedMap = NULL;
     atwAccelInit(m);

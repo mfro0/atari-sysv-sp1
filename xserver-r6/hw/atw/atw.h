@@ -67,6 +67,7 @@ typedef struct {
 
 typedef struct {
     volatile unsigned char *fb;		/* card window */
+    unsigned long phys;			/* its physical address */
     unsigned long size;			/* current layout: ATW_2MB or ATW_4MB */
     int		memreg;			/* register 15 value for that layout */
     atwModeRec	*mode;
