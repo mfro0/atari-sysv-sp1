@@ -117,12 +117,20 @@ $CC -o programs/xfuji programs/xfuji.o -Lexports/lib -lXext -lX11 \
 	config/asv/asviob.o -rpath=/usr/x11r6/lib -rpath-link=exports/lib
 python3 "$HERE/../xserver/fixneeded.py" programs/xfuji > /dev/null
 
+# ttpanel: the front panel the session starts (xdm/Xsession)
+$CC -O -Iexports/include -c "$HERE/xdm/ttpanel.c" -o programs/ttpanel.o
+$CC -o programs/ttpanel programs/ttpanel.o -Lexports/lib -lX11 \
+	-lsocket -lsockhost -lnsl config/asv/libcextra.o config/asv/asvcompat.o \
+	config/asv/asviob.o -rpath=/usr/x11r6/lib -rpath-link=exports/lib
+python3 "$HERE/../xserver/fixneeded.py" programs/ttpanel > /dev/null
+
 # 7. an install tree: copy dist/usr/x11r6 to /usr/x11r6 on the machine
 D=$WORK/dist/usr/x11r6
 rm -rf "$WORK/dist"; mkdir -p $D/bin $D/lib
 cp programs/Xserver/Xatw $D/bin/
 for c in $CLIENTS; do cp programs/$c/$c $D/bin/; done
 cp programs/xterm/resize $D/bin/
+cp programs/ttpanel $D/bin/
 for l in lib/*/lib*.so.[0-9]*; do cp $l $D/lib/; done
 
 # xdm: the ASV configuration, xfuji, and the Fuji itself - taken from your

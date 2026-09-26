@@ -47,6 +47,14 @@ finds it by content. `xfuji` waits for the login box and draws the logo,
 doubled, in the space above it, shaped (SHAPE extension) so that only the
 logo covers the root.
 
+The session (`xdm/Xsession`) opens an xterm and `ttpanel`, a front panel
+along the bottom of the screen in the manner of CDE's and IRIX's: a button
+per program (terminal, the `xfm` file manager, an editor, a calculator, the
+manuals, a load meter, OpenUA) and a clock. Its buttons come from
+`~/.ttpanelrc`, one `Label : icon : command` per line (see `xdm/ttpanel.c`
+for the icons). The OpenLook Workspace menu (right button on the
+background) has the terminal and the file manager too.
+
 Start it with `/usr/x11r6/bin/xdm -config /usr/x11r6/lib/X11/xdm/xdm-config`
 (from an rc script, instead of the system's X11R4 xdm). Two details:
 resources load through `xrdb -nocpp` (there may be no cpp), and `Xstartup`

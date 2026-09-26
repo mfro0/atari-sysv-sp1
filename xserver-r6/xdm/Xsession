@@ -4,7 +4,7 @@
 OPENWINHOME=/usr/openwin; export OPENWINHOME
 # XView's Help key: its built-in default is /usr/lib/help, the system's
 HELPPATH=$OPENWINHOME/lib/help; export HELPPATH
-PATH=/usr/openwin/bin:/usr/x11r6/bin:$PATH:/usr/local/bin:/usr/local/lib/transputer/bin; export PATH
+PATH=/usr/openwin/bin:/usr/x11r6/bin:$PATH:/usr/bin/X11:/usr/local/bin:/usr/local/lib/transputer/bin; export PATH
 # an empty shell field in /etc/passwd (root's, on ASV) means /bin/sh, but
 # xdm passes it on as an empty SHELL, and cmdtool then fails to start one.
 # bash, when it is installed and runs (it is an AMIX program: it needs the
@@ -16,8 +16,10 @@ if test -z "$SHELL"; then
 fi
 test -x $HOME/.xsession && exec $HOME/.xsession
 xsetroot -solid '#5f7f9f'
-cmdtool -Wp 30 30 &
-clock -Wp 850 30 &
+# a terminal, and the front panel along the bottom (ttpanel: the buttons
+# come from ~/.ttpanelrc, see ttpanel.c)
+xterm -geometry 80x24+30+30 &
+ttpanel &
 # olvwm (olwm with a virtual desktop) if it is installed; a ~/.xsession
 # of your own can exec olwm instead
 test -x $OPENWINHOME/bin/olvwm && exec olvwm

@@ -1,8 +1,9 @@
 "Workspace"	TITLE
-"Shell Tool"	DEFAULT exec cmdtool
+"Terminal"	DEFAULT exec /usr/x11r6/bin/xterm
+"File Manager"	exec /usr/bin/X11/xfm
 "Text Editor"	exec textedit
+"Shell Tool"	exec cmdtool
 "Clock"		exec clock
-"xterm"		exec /usr/x11r6/bin/xterm
 "XView Demos"	MENU
 	"Color Logo"	exec /usr/openwin/demo/xview/color/color_logo
 	"Color Animation" exec /usr/openwin/demo/xview/color/color_animate
