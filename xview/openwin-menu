@@ -1,6 +1,6 @@
 "Workspace"	TITLE
 "Terminal"	DEFAULT exec /usr/x11r6/bin/xterm
-"File Manager"	exec /usr/bin/X11/xfm
+"File Manager"	exec /usr/bin/X11/wish
 "Text Editor"	exec textedit
 "Shell Tool"	exec cmdtool
 "Clock"		exec clock

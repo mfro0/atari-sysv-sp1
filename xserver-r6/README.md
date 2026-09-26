@@ -49,7 +49,8 @@ logo covers the root.
 
 The session (`xdm/Xsession`) opens an xterm and `ttpanel`, a front panel
 along the bottom of the screen in the manner of CDE's and IRIX's: a button
-per program (terminal, the `xfm` file manager, an editor, a calculator, the
+per program (terminal, the file manager - Atari's `wish`, not Tcl's - an
+editor, a calculator, the
 manuals, a load meter, OpenUA) and a clock. Its buttons come from
 `~/.ttpanelrc`, one `Label : icon : command` per line (see `xdm/ttpanel.c`
 for the icons). The OpenLook Workspace menu (right button on the

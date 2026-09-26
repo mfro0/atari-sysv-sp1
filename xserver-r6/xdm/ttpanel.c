@@ -9,7 +9,8 @@
  *
  * where icon is one of term, files, edit, calc, book, load, game, clock,
  * mail, paint, tool, and the command runs through /bin/sh. '#' starts a
- * comment. Without the file the panel offers a terminal, the file manager,
+ * comment. Without the file the panel offers a terminal, the file manager
+ * (Atari's wish - not Tcl's: its desktop with wx2/wxd),
  * an editor, a calculator, the manuals, a load meter and OpenUA.
  *
  * With olvwm (as patched for Atari System V) the panel also has a
@@ -73,7 +74,7 @@ static unsigned long col[C_N];
 
 static const char *defaults =
 	"Terminal : term  : xterm\n"
-	"Files    : files : xfm\n"
+	"Files    : files : wish\n"
 	"Editor   : edit  : textedit\n"
 	"Calc     : calc  : xcalc\n"
 	"Manuals  : book  : xman\n"
