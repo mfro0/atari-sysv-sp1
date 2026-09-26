@@ -9,6 +9,11 @@
 # video memory, runs the program on it, and when the program exits stops
 # the server - which hands the card back to the desktop. Ctrl+Alt+F1 and
 # F<N> switch between the two meanwhile.
+#
+# Run it from an X session: the new server gets that session's cookie.
+# (Without one it would refuse even local clients: X cannot list ASV's
+# own addresses, so no host counts as local - the reason xdm hands out
+# cookies too.)
 MODE=640x480
 VT=2
 while [ $# -gt 0 ]; do
@@ -19,13 +24,24 @@ while [ $# -gt 0 ]; do
 	esac
 done
 [ $# -gt 0 ] || { echo "usage: xatwrun [-mode WxH] [-vt N] program [args...]" >&2; exit 2; }
+XB=/usr/x11r6/bin
 D=`uname -n`:`expr $VT - 1`
-/usr/x11r6/bin/Xatw :`expr $VT - 1` -mode $MODE -vt $VT -fboffset 0x100000 \
+KEY=`$XB/xauth list 2> /dev/null | awk '$2 == "MIT-MAGIC-COOKIE-1" { print $3; exit }'`
+if [ -z "$KEY" ]; then
+	echo "xatwrun: no X cookie to lend the new server; run it from an X session" >&2
+	exit 1
+fi
+XAUTHORITY=/tmp/.xatwrun.$VT.auth
+export XAUTHORITY
+rm -f $XAUTHORITY
+$XB/xauth add $D MIT-MAGIC-COOKIE-1 $KEY 2> /dev/null
+chmod 600 $XAUTHORITY
+$XB/Xatw :`expr $VT - 1` -mode $MODE -vt $VT -fboffset 0x100000 -auth $XAUTHORITY \
 	> /tmp/xatwrun.$VT.log 2>&1 &
 XPID=$!
 # the server takes a few seconds on a TT: wait until it answers
 n=0
-until /usr/x11r6/bin/xset -display $D q > /dev/null 2>&1; do
+until $XB/xset -display $D q > /dev/null 2>&1; do
 	n=`expr $n + 1`
 	kill -0 $XPID 2> /dev/null || n=99	# (ASV's sh has no "!")
 	if [ $n -gt 60 ]; then
@@ -39,4 +55,5 @@ DISPLAY=$D "$@"
 rc=$?
 kill $XPID
 wait $XPID 2> /dev/null
+rm -f $XAUTHORITY
 exit $rc
