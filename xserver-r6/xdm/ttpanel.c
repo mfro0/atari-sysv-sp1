@@ -12,6 +12,12 @@
  * comment. Without the file the panel offers a terminal, the file manager,
  * an editor, a calculator, the manuals, a load meter and OpenUA.
  *
+ * With olvwm (as patched for Atari System V) the panel also has a
+ * workspace switcher - a button per screen of the virtual desktop, read
+ * from the root's _OLVWM_DESKTOP and chosen with an _OLVWM_GOTO message -
+ * and a Log out button, which sends _OLVWM_EXIT: olvwm then asks to
+ * confirm, as its Workspace menu's Exit does.
+ *
  * Options: -top (at the top of the screen instead), -fn FONT.
  *
  * Plain Xlib, so it runs on the R6.3 libraries and draws in a handful of
@@ -28,6 +34,7 @@
 #include <sys/wait.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
 
 #define BTN_W	64
 #define BTN_H	58
@@ -51,6 +58,9 @@ static Button	btn[MAXBTN];
 static int	nbtn;
 static int	pressed = -1;
 static int	clock_x;
+static int	ws_x, ws_cols, ws_rows, ws_cur;	/* the switcher; ws_cols 0 = none */
+static int	exit_x;
+static Atom	a_desktop, a_goto, a_exit;
 
 /* the Indigo Magic / CDE greys and blues, and the icons' colours */
 enum { C_FACE, C_LIGHT, C_SHADOW, C_DARK, C_TEXT, C_BLUE, C_WHITE,
@@ -255,6 +265,16 @@ static void icon(const char *name, int x, int y)
 		fg(C_WHITE); XFillArc(dpy, win, gc, x + 5, y + 5, 22, 22, 0, 360 * 64);
 		line(C_DARK, x + 16, y + 16, x + 16, y + 8);
 		line(C_DARK, x + 16, y + 16, x + 22, y + 16);
+	} else if (!strcmp(name, "exit")) {
+		/* a door ajar, and an arrow out of it */
+		rect(C_DARK, x + 5, y + 3, 16, 26);
+		rect(C_TAN, x + 6, y + 4, 14, 24);
+		rect(C_DARK, x + 8, y + 5, 10, 24);
+		rect(C_SHADOW, x + 9, y + 6, 8, 22);
+		rect(C_YELLOW, x + 15, y + 16, 2, 2);
+		rect(C_RED, x + 19, y + 14, 8, 4);
+		for (i = 0; i < 5; i++)
+			line(C_RED, x + 26 + i, y + 11 + i, x + 26 + i, y + 20 - i);
 	} else {			/* tool, or anything unknown: a gear-ish box */
 		rect(C_DARK, x + 8, y + 8, 16, 16);
 		rect(C_SHADOW, x + 9, y + 9, 14, 14);
@@ -288,7 +308,7 @@ static void draw_clock(void)
 	static const char *wd[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
 	static const char *mo[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
 				    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-	int w = panel_w - clock_x - PAD, tw, dw;
+	int w = 110, tw, dw;
 
 	sprintf(t, "%2d:%02d", tm->tm_hour, tm->tm_min);
 	sprintf(d, "%s %d %s", wd[tm->tm_wday], tm->tm_mday, mo[tm->tm_mon]);
@@ -305,6 +325,53 @@ static void draw_clock(void)
 	XDrawString(dpy, win, gc, clock_x + (w - dw) / 2, PAD + BTN_H - 8, d, (int)strlen(d));
 }
 
+/* the workspace switcher: ws_cols x ws_rows cells, the one on show sunk */
+#define WS_W	24
+
+static void ws_cell(int n, int *x, int *y, int *w, int *h)
+{
+	int c = (n - 1) % ws_cols, r = (n - 1) / ws_cols;
+
+	*h = (BTN_H - (ws_rows - 1) * 2) / ws_rows;
+	*w = WS_W;
+	*x = ws_x + c * (WS_W + 2);
+	*y = PAD + r * (*h + 2);
+}
+
+static void draw_switcher(void)
+{
+	int n, x, y, w, h, tw;
+	char s[4];
+
+	if (ws_cols == 0)
+		return;
+	for (n = 1; n <= ws_cols * ws_rows; n++) {
+		int on = (n == ws_cur);
+
+		ws_cell(n, &x, &y, &w, &h);
+		rect(on ? C_BLUE : C_FACE, x, y, w, h);
+		bevel(x, y, w, h, on);
+		sprintf(s, "%d", n);
+		tw = XTextWidth(font, s, (int)strlen(s));
+		fg(on ? C_WHITE : C_TEXT);
+		XDrawString(dpy, win, gc, x + (w - tw) / 2 + on,
+			    y + (h + font->ascent) / 2 + on, s, (int)strlen(s));
+	}
+}
+
+static void draw_exit(int sunk)
+{
+	const char *l = "Log out";
+	int w = XTextWidth(font, l, (int)strlen(l));
+
+	rect(C_FACE, exit_x, PAD, BTN_W, BTN_H);
+	bevel(exit_x, PAD, BTN_W, BTN_H, sunk);
+	icon("exit", exit_x + (BTN_W - 32) / 2 + sunk, PAD + 5 + sunk);
+	fg(C_TEXT);
+	XDrawString(dpy, win, gc, exit_x + (BTN_W - w) / 2 + sunk,
+		    PAD + BTN_H - 6 + sunk, l, (int)strlen(l));
+}
+
 static void draw_all(void)
 {
 	int i;
@@ -313,18 +380,90 @@ static void draw_all(void)
 	bevel(0, 0, panel_w, panel_h, 0);
 	for (i = 0; i < nbtn; i++)
 		draw_button(i);
+	draw_switcher();
 	draw_clock();
+	draw_exit(0);
 }
 
+/* olvwm's _OLVWM_DESKTOP: columns, rows, the screen on show */
+static void read_desktop(void)
+{
+	Atom type;
+	int fmt;
+	unsigned long n, after;
+	unsigned char *p = NULL;
+
+	ws_cols = ws_rows = ws_cur = 0;
+	if (XGetWindowProperty(dpy, RootWindow(dpy, scr), a_desktop, 0, 3, False,
+			       XA_INTEGER, &type, &fmt, &n, &after, &p) == Success
+	    && p != NULL && fmt == 32 && n == 3) {
+		long *v = (long *)p;
+
+		/* olvwm goes to screens 1-10 */
+		if (v[0] > 0 && v[1] > 0 && v[0] * v[1] <= 10) {
+			ws_cols = (int)v[0];
+			ws_rows = (int)v[1];
+			ws_cur = (int)v[2];
+		}
+	}
+	if (p != NULL)
+		XFree((char *)p);
+}
+
+/* positions, and the panel's width, from what it holds */
+static void layout(int sw)
+{
+	int i, x = PAD;
+
+	for (i = 0; i < nbtn; i++) {
+		btn[i].x = x;
+		x += BTN_W + 2;
+	}
+	x += 6;
+	ws_x = x;
+	if (ws_cols)
+		x += ws_cols * (WS_W + 2) + 6;
+	clock_x = x;
+	x += 110 + 4;
+	exit_x = x;
+	panel_w = x + BTN_W + PAD;
+	if (panel_w > sw)
+		panel_w = sw;
+}
+
+static void send_root(Atom what, long arg)
+{
+	XEvent e;
+
+	memset(&e, 0, sizeof e);
+	e.xclient.type = ClientMessage;
+	e.xclient.window = RootWindow(dpy, scr);
+	e.xclient.message_type = what;
+	e.xclient.format = 32;
+	e.xclient.data.l[0] = arg;
+	XSendEvent(dpy, RootWindow(dpy, scr), False,
+		   SubstructureRedirectMask | SubstructureNotifyMask, &e);
+	XFlush(dpy);
+}
+
+/* what is at (x, y): a launcher's index, 100 + n for switcher screen n,
+ * 200 for Log out, -1 for nothing */
 static int hit(int x, int y)
 {
-	int i;
+	int i, cx, cy, cw, ch;
 
 	if (y < PAD || y >= PAD + BTN_H)
 		return -1;
 	for (i = 0; i < nbtn; i++)
 		if (x >= btn[i].x && x < btn[i].x + BTN_W)
 			return i;
+	for (i = 1; ws_cols && i <= ws_cols * ws_rows; i++) {
+		ws_cell(i, &cx, &cy, &cw, &ch);
+		if (x >= cx && x < cx + cw && y >= cy && y < cy + ch)
+			return 100 + i;
+	}
+	if (x >= exit_x && x < exit_x + BTN_W)
+		return 200;
 	return -1;
 }
 
@@ -369,13 +508,14 @@ int main(int argc, char **argv)
 		bigfont = font;
 
 	load_config();
+	a_desktop = XInternAtom(dpy, "_OLVWM_DESKTOP", False);
+	a_goto = XInternAtom(dpy, "_OLVWM_GOTO", False);
+	a_exit = XInternAtom(dpy, "_OLVWM_EXIT", False);
+	/* the window manager may start after us: watch for its property */
+	XSelectInput(dpy, RootWindow(dpy, scr), PropertyChangeMask);
+	read_desktop();
 	panel_h = BTN_H + 2 * PAD;
-	for (i = 0; i < nbtn; i++)
-		btn[i].x = PAD + i * (BTN_W + 2);
-	clock_x = PAD + nbtn * (BTN_W + 2) + 6;
-	panel_w = clock_x + 110 + PAD;
-	if (panel_w > sw)
-		panel_w = sw;
+	layout(sw);
 
 	/* no frame: the window manager leaves an override-redirect window
 	 * alone, and the panel keeps itself on top when covered */
@@ -421,20 +561,46 @@ int main(int argc, char **argv)
 			if (ev.xvisibility.state != VisibilityUnobscured)
 				XRaiseWindow(dpy, win);
 			break;
+		case PropertyNotify:
+			if (ev.xproperty.atom == a_desktop) {
+				int oc = ws_cols, orr = ws_rows;
+
+				read_desktop();
+				if (ws_cols != oc || ws_rows != orr) {
+					layout(sw);
+					XMoveResizeWindow(dpy, win, (sw - panel_w) / 2,
+							  top ? 0 : sh - panel_h,
+							  panel_w, panel_h);
+					draw_all();
+				} else
+					draw_switcher();
+			}
+			break;
 		case ButtonPress:
 			pressed = hit(ev.xbutton.x, ev.xbutton.y);
-			if (pressed >= 0)
+			if (pressed >= 0 && pressed < MAXBTN)
 				draw_button(pressed);
+			else if (pressed == 200)
+				draw_exit(1);
 			break;
 		case ButtonRelease:
 			if (pressed >= 0) {
 				int was = pressed;
 
 				pressed = -1;
-				draw_button(was);
+				if (was < MAXBTN)
+					draw_button(was);
+				else if (was == 200)
+					draw_exit(0);
 				XFlush(dpy);
-				if (hit(ev.xbutton.x, ev.xbutton.y) == was)
+				if (hit(ev.xbutton.x, ev.xbutton.y) != was)
+					break;
+				if (was < MAXBTN)
 					launch(btn[was].cmd);
+				else if (was > 100 && was <= 110)
+					send_root(a_goto, (long)(was - 100));
+				else if (was == 200)
+					send_root(a_exit, 0L);
 			}
 			break;
 		}
