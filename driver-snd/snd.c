@@ -56,7 +56,7 @@ int snddevflag = 0;			/* new-style (DDI) entry points */
 #define R_END		0x0F
 #define R_MODE		0x21
 
-#define RING		0x8000		/* 32 KB: 1.3 s of 25 kHz mono */
+#define RING		0x10000		/* 64 KB: 2.6 s of 25 kHz mono, 1.3 s stereo */
 #define LEAD		512		/* after an underrun, restart this far ahead */
 #define BOUNCE		1024		/* write() moves this much per step (on the kernel stack) */
 #define ST_RAM		0x40000000	/* iomem_alloc attribute: ST-RAM */
