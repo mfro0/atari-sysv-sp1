@@ -32,8 +32,12 @@ link=
 # an interrupted run resumes into the same .partial directory
 part=$(ls -d "$dest"/*.partial 2>/dev/null | head -1)
 [ -n "$part" ] || part="$dest/$snap.partial"
+# 24 = files vanished during the transfer (a pid file, /tmp): the
+# snapshot is still whole
+rc=0
 rsync -aH --numeric-ids --fake-super --partial --delete --stats \
-	--timeout=900 $link "rsync://backup@$ASV_HOST/root/" "$part/"
+	--timeout=900 $link "rsync://backup@$ASV_HOST/root/" "$part/" || rc=$?
+[ $rc -eq 0 ] || [ $rc -eq 24 ] || exit $rc
 mv "$part" "$dest/$snap"
 ln -sfn "$snap" "$dest/latest"
 echo "snapshot: $dest/$snap"
