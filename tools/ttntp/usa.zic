@@ -1,0 +1,32 @@
+# usa.zic - the US daylight-time rules as they stand since 2007, for
+# Atari System V's zic (its 1991 zones stop at the 1987 rules: daylight
+# time from the first Sunday in April to the last in October).
+#
+#   zic -d /usr/lib/locale/TZ usa.zic
+#
+# From 2007 (Energy Policy Act of 2005): the second Sunday in March to the
+# first Sunday in November. Earlier years as the tz database has them,
+# from 1967 on (the zones' own start; the wartime rules are left out).
+
+# Rule	NAME	FROM	TO	TYPE	IN	ON	AT	SAVE	LETTER
+Rule	US	1967	2006	-	Oct	lastSun	2:00	0	S
+Rule	US	1967	1973	-	Apr	lastSun	2:00	1:00	D
+Rule	US	1974	only	-	Jan	6	2:00	1:00	D
+Rule	US	1975	only	-	Feb	lastSun	2:00	1:00	D
+Rule	US	1976	1986	-	Apr	lastSun	2:00	1:00	D
+Rule	US	1987	2006	-	Apr	Sun>=1	2:00	1:00	D
+Rule	US	2007	max	-	Mar	Sun>=8	2:00	1:00	D
+Rule	US	2007	max	-	Nov	Sun>=1	2:00	0	S
+
+# Zone	NAME		GMTOFF	RULES	FORMAT
+Zone	EST5EDT		-5:00	US	E%sT
+Zone	CST6CDT		-6:00	US	C%sT
+Zone	MST7MDT		-7:00	US	M%sT
+Zone	PST8PDT		-8:00	US	P%sT
+
+# the other names ASV gives the same zones
+Link	EST5EDT		US/Eastern
+Link	CST6CDT		US/Central
+Link	MST7MDT		US/Mountain
+Link	MST7MDT		Navajo
+Link	PST8PDT		US/Pacific

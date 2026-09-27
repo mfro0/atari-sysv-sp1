@@ -29,8 +29,27 @@ cp S99ttntp /etc/rc2.d/                         # at boot
 crontab -l > /tmp/c; echo "23 * * * * /usr/local/bin/ttntp -q -z" >> /tmp/c; crontab /tmp/c
 ```
 
-and the time zone in `/etc/TIMEZONE` (`TZ=MST7MDT` and so on). The 1991
-zone rules have the old US daylight-time dates.
+and the time zone in `/etc/TIMEZONE`.
+
+## Time zones: today's daylight-time dates
+
+ASV's 1991 libc reads a plain `TZ=MST7MDT` as a POSIX-style string and
+applies its own built-in rules - the 1987 US ones, daylight time from the
+first Sunday in April to the last in October - and it does not understand
+the POSIX rule syntax (`M3.2.0`) that would override them. It reads the
+compiled zone files in `/usr/lib/locale/TZ` only when `TZ` starts with a
+colon. So `usa.zic` recompiles the four US zones with the rules in force
+since 2007 (the second Sunday in March to the first Sunday in November),
+and `TZ` names the file:
+
+```sh
+cd /usr/lib/locale && tar cf /somewhere/TZ.pre-2007.tar TZ   # keep the old ones
+zic -d /usr/lib/locale/TZ usa.zic
+# /etc/TIMEZONE:  TZ=:US/Mountain   (or :US/Eastern, :US/Central, :US/Pacific)
+```
+
+Checked on a real TT: 20 March and 28 October 2026 read MDT with
+`TZ=:US/Mountain` and MST with the old plain `TZ=MST7MDT`.
 
 ## The clock chip
 
