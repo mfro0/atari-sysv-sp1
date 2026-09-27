@@ -1,0 +1,17 @@
+#!/sbin/sh
+# /etc/rc2.d/S99ttntp - set the clock from the network at boot (sp1
+# tools/ttntp). The route to the time servers is the one in
+# /etc/defaultrouter, if the system has no default route of its own; the
+# nameserver is /etc/resolv.conf's. ttntp -z also keeps the TT's clock chip
+# on local time, as TOS keeps it.
+case "$1" in
+start|'')
+	[ -f /etc/TIMEZONE ] && . /etc/TIMEZONE
+	# (no "!" in this sh)
+	if [ -s /etc/defaultrouter ]; then
+		/usr/bin/netstat -rn | grep '^default' > /dev/null ||
+			/usr/sbin/route add default `cat /etc/defaultrouter` 1 > /dev/null 2>&1
+	fi
+	/usr/local/bin/ttntp -q -z &
+	;;
+esac
