@@ -17,7 +17,12 @@ CROSS=${ASV_CROSS:-$HOME/opt/asv-cross}
 AMIX_REPO=https://github.com/isoriano1968/x11r6.3-amix.git
 AMIX_REV=cb61a2115659cb3ae27c649439edb2ca133131b6
 REALROOT=$CROSS/m68k-cbm-sysv4/sysroot
-CLIENTS="xdpyinfo xclock xlogo xterm twm xsetroot xset xlsfonts xfd xrdb xauth xdm xrefresh"
+CLIENTS="xdpyinfo xclock xlogo xterm twm xsetroot xset xlsfonts xfd xrdb xauth xdm xrefresh xwd"
+# XFree86 3.3.6's xterm (ANSI colours) replaces R6.3's, which is kept as
+# xterm-r63. The tarball is pinned: its SHA-256 was checked against the copy
+# inside Debian's archived xfree86-1 3.3.6 source (snapshot.debian.org).
+XF86_SRC=http://ftp.xfree86.org/pub/XFree86/3.3.6/source/X336src-1.tgz
+XF86_SHA256=87231766bf967c0e6174e28c6bdf50e42c0f3f6c732489e455f4c405cfc43844
 
 # the gcc-cross-amix wrapper must have the PIC fixes for GNU as (LC%N
 # labels, long PLT calls) and AMIX_RETURN_D0_TO_A0
@@ -104,9 +109,30 @@ done
 # tty's window size with TIOCSWINSZ from xterm's cursor-position report)
 (cd programs/xterm && make resize) > programs/xterm/resize.log 2>&1 || { echo "build failed: resize"; exit 1; }
 
+# 5b. XFree86 3.3.6's xterm, in programs/xtermxf: xterm's own headers
+#     included with quotes (xterm-quote-includes.py), then the ASV changes
+#     (patches/xterm-xf86-asv.patch): no utmp, environ as _environ, the pty
+#     modules pushed only when missing, setjmp for sigsetjmp, the colours
+#     on without app-defaults, TERM=xterm-xfree86
+if [ ! -d programs/xtermxf ]; then
+	[ -f "$WORK/X336src-1.tgz" ] || curl -sfL "$XF86_SRC" -o "$WORK/X336src-1.tgz"
+	echo "$XF86_SHA256  $WORK/X336src-1.tgz" | sha256sum -c --quiet || {
+		echo "X336src-1.tgz: checksum mismatch" >&2; exit 1; }
+	rm -rf "$WORK/xf86" && mkdir "$WORK/xf86"
+	tar xzf "$WORK/X336src-1.tgz" -C "$WORK/xf86" xc/programs/xterm
+	cp -r "$WORK/xf86/xc/programs/xterm" programs/xtermxf
+	chmod -R u+w programs/xtermxf
+	python3 "$HERE/xterm-quote-includes.py" programs/xtermxf > /dev/null
+	(cd programs/xtermxf && patch -p1 < "$HERE/patches/xterm-xf86-asv.patch")
+	(cd programs/xtermxf && ../../config/imake/imake -DASV -I../../config/cf \
+		-DTOPDIR=../.. -DCURDIR=programs/xtermxf)
+fi
+(cd programs/xtermxf && make xterm) > programs/xtermxf/build.log 2>&1 || { echo "build failed: XFree86 xterm"; exit 1; }
+python3 "$HERE/xterm-terminfo.py" programs/xtermxf/terminfo programs/xtermxf/xterm-xf86.ti
+
 # 6. the wrapper hands ld absolute library paths and ASV's .so files have no
 #    SONAME: rewrite the NEEDED entries to bare names (after the last link)
-for p in Xserver/Xatw xterm/resize `for c in $CLIENTS; do echo $c/$c; done`; do
+for p in Xserver/Xatw xterm/resize xtermxf/xterm `for c in $CLIENTS; do echo $c/$c; done`; do
 	python3 "$HERE/../xserver/fixneeded.py" programs/$p > /dev/null
 done
 
@@ -130,6 +156,14 @@ rm -rf "$WORK/dist"; mkdir -p $D/bin $D/lib
 cp programs/Xserver/Xatw $D/bin/
 for c in $CLIENTS; do cp programs/$c/$c $D/bin/; done
 cp programs/xterm/resize $D/bin/
+mv $D/bin/xterm $D/bin/xterm-r63
+cp programs/xtermxf/xterm $D/bin/xterm
+A=$D/lib/X11/app-defaults
+mkdir -p $A
+cp programs/xtermxf/XTerm.ad $A/XTerm
+cp programs/xtermxf/XTerm-col.ad $A/XTerm-color
+mkdir -p $D/lib/terminfo
+cp programs/xtermxf/xterm-xf86.ti $D/lib/terminfo/
 cp programs/ttpanel $D/bin/
 for l in lib/*/lib*.so.[0-9]*; do cp $l $D/lib/; done
 

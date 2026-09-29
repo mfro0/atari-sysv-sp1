@@ -1,0 +1,233 @@
+diff -ruN a/charproc.c b/charproc.c
+--- a/charproc.c
++++ b/charproc.c
+@@ -155,6 +155,60 @@
+ #define XtNboldFont		"boldFont"
+ #define XtNc132			"c132"
+ #define XtNcharClass		"charClass"
++
++/*
++ * ASV: the ANSI colours are on without app-defaults (XFree86's XTerm-color
++ * values, as numbers so that no colour database is needed). Resources
++ * still override them.
++ */
++#ifndef DFT_COLOR0
++#define DFT_COLOR0 "rgb:00/00/00"
++#endif
++#ifndef DFT_COLOR1
++#define DFT_COLOR1 "rgb:cd/00/00"
++#endif
++#ifndef DFT_COLOR2
++#define DFT_COLOR2 "rgb:00/cd/00"
++#endif
++#ifndef DFT_COLOR3
++#define DFT_COLOR3 "rgb:cd/cd/00"
++#endif
++#ifndef DFT_COLOR4
++#define DFT_COLOR4 "rgb:00/00/cd"
++#endif
++#ifndef DFT_COLOR5
++#define DFT_COLOR5 "rgb:cd/00/cd"
++#endif
++#ifndef DFT_COLOR6
++#define DFT_COLOR6 "rgb:00/cd/cd"
++#endif
++#ifndef DFT_COLOR7
++#define DFT_COLOR7 "rgb:e5/e5/e5"
++#endif
++#ifndef DFT_COLOR8
++#define DFT_COLOR8 "rgb:4d/4d/4d"
++#endif
++#ifndef DFT_COLOR9
++#define DFT_COLOR9 "rgb:ff/00/00"
++#endif
++#ifndef DFT_COLOR10
++#define DFT_COLOR10 "rgb:00/ff/00"
++#endif
++#ifndef DFT_COLOR11
++#define DFT_COLOR11 "rgb:ff/ff/00"
++#endif
++#ifndef DFT_COLOR12
++#define DFT_COLOR12 "rgb:5c/5c/ff"
++#endif
++#ifndef DFT_COLOR13
++#define DFT_COLOR13 "rgb:ff/00/ff"
++#endif
++#ifndef DFT_COLOR14
++#define DFT_COLOR14 "rgb:00/ff/ff"
++#endif
++#ifndef DFT_COLOR15
++#define DFT_COLOR15 "rgb:ff/ff/ff"
++#endif
+ #define XtNcolor0		"color0"
+ #define XtNcolor1		"color1"
+ #define XtNcolor10		"color10"
+@@ -703,52 +757,52 @@
+ #if OPT_ISO_COLORS
+ {XtNcolor0, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_0]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR0},
+ {XtNcolor1, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_1]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR1},
+ {XtNcolor2, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_2]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR2},
+ {XtNcolor3, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_3]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR3},
+ {XtNcolor4, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_4]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR4},
+ {XtNcolor5, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_5]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR5},
+ {XtNcolor6, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_6]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR6},
+ {XtNcolor7, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_7]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR7},
+ {XtNcolor8, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_8]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR8},
+ {XtNcolor9, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_9]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR9},
+ {XtNcolor10, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_10]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR10},
+ {XtNcolor11, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_11]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR11},
+ {XtNcolor12, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_12]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR12},
+ {XtNcolor13, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_13]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR13},
+ {XtNcolor14, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_14]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR14},
+ {XtNcolor15, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_15]),
+-	XtRString, "XtDefaultForeground"},
++	XtRString, DFT_COLOR15},
+ {XtNcolorBD, XtCForeground, XtRPixel, sizeof(Pixel),
+ 	XtOffsetOf(XtermWidgetRec, screen.Acolors[COLOR_BD]),
+ 	XtRString, "XtDefaultForeground"},
+diff -ruN a/Imakefile b/Imakefile
+--- a/Imakefile
++++ b/Imakefile
+@@ -64,9 +64,15 @@
+  OSMAJORVERSION = OSMajorVersion
+  OSMINORVERSION = OSMinorVersion
+ 
++#ifdef ASVArchitecture
++XCOMM ASV: the utmp(x) functions and environ live only in the static libc.a;
++XCOMM the shared libc exports _environ
++        UTMPDEF = -Denviron=_environ
++#else
+ #if !defined(AmoebaArchitecture) && !defined(OS2Architecture) && !defined(__GNU__)
+         UTMPDEF = -DUTMP
+ #endif
++#endif
+ 
+ #ifdef AmoebaArchitecture
+         EXTRASRC = ttysvr.c
+@@ -75,7 +81,11 @@
+    MAIN_DEFINES = $(UTMPDEF) $(TTYGROUPDEF) $(PUCCPTYDDEF) $(NOPOSIXTERMIOS) \
+ 		  -DOSMAJORVERSION=$(OSMAJORVERSION) \
+ 		  -DOSMINORVERSION=$(OSMINORVERSION)
+-   MISC_DEFINES = /* -DALLOWLOGGING -DALLOWLOGFILEEXEC */ 
++#ifdef ASVArchitecture
++   MISC_DEFINES = -Denviron=_environ
++#else
++   MISC_DEFINES = /* -DALLOWLOGGING -DALLOWLOGFILEEXEC */
++#endif
+     XKB_DEFINES = XkbClientDefines
+         DEFINES = -I. $(XKB_DEFINES) $(TERMCAPDEFINES) $(FEATURE_DEFINES) $(SCROLLBAR_RIGHT)
+ 
+diff -ruN a/main.c b/main.c
+--- a/main.c
++++ b/main.c
+@@ -391,8 +391,10 @@
+ 
+ #ifdef SVR4
+ #define USE_POSIX_WAIT
++#ifndef ASV	/* no setegid in ASV's shared libc; this xterm isn't setuid */
+ #define HAS_SAVED_IDS_AND_SETEUID
+ #endif
++#endif
+ 
+ #ifdef linux
+ #define HAS_SAVED_IDS_AND_SETEUID
+@@ -771,6 +773,14 @@
+ #ifndef USE_SYSV_UTMP
+ static int tslot;
+ #endif	/* USE_SYSV_UTMP */
++#ifdef ASV
++/* SVR4 hides sigjmp_buf from a strict ANSI compiler, and ASV's shared libc
++ * has no siglongjmp. The one use (hungtty, a signal() handler: nothing is
++ * left blocked when it runs) is served by setjmp/longjmp, as in R6.3. */
++#define sigjmp_buf jmp_buf
++#define sigsetjmp(e, m) setjmp(e)
++#define siglongjmp longjmp
++#endif
+ static sigjmp_buf env;
+ 
+ char *ProgramName;
+@@ -2127,6 +2137,7 @@
+ 	"x11term",		/* for people who want special term name */
+ #endif
++	"xterm-xfree86",	/* this xterm's own entry, where installed */
+ 	DFT_TERMTYPE,		/* for people who want special term name */
+ 	"xterm",		/* the prefered name, should be fastest */
+ 	"vt102",
+ 	"vt100",
+@@ -2632,7 +2643,13 @@
+ 		    SysError (1);
+ 		}
+ #ifdef I_PUSH
+-		if (ioctl (ptyfd, I_PUSH, "ptem") < 0) {
++		/*
++		 * Push the terminal modules only if the system has not: Atari
++		 * System V autopushes ptem, gls and ldterm onto every pts, and a
++		 * second ldterm echoes every character twice.
++		 */
++		if (ioctl (ptyfd, I_FIND, "ptem") == 0 &&
++		    ioctl (ptyfd, I_PUSH, "ptem") < 0) {
+ 		    SysError (2);
+ 		}
+ #if !defined(SVR4) && !(defined(SYSV) && defined(i386))
+@@ -2640,11 +2657,13 @@
+ 		    SysError (3);
+ 		}
+ #endif /* !SVR4 */
+-		if (ioctl (ptyfd, I_PUSH, "ldterm") < 0) {
++		if (ioctl (ptyfd, I_FIND, "ldterm") == 0 &&
++		    ioctl (ptyfd, I_PUSH, "ldterm") < 0) {
+ 		    SysError (4);
+ 		}
+ #ifdef SVR4			/* from Sony */
+-		if (ioctl (ptyfd, I_PUSH, "ttcompat") < 0) {
++		if (ioctl (ptyfd, I_FIND, "ttcompat") == 0 &&
++		    ioctl (ptyfd, I_PUSH, "ttcompat") < 0) {
+ 		    SysError (5);
+ 		}
+ #endif /* SVR4 */

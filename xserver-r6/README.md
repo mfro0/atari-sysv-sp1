@@ -30,8 +30,9 @@ generators that the build runs (`makestrs`, `makekeys`) are compiled with the ho
 Built so far: libX11, Xext, Xt, Xaw, Xmu, ICE, SM, Xi, Xtst, Xp, XIE,
 oldX and PEX5 as shared libraries (2.1 MB, SONAMEs `libX11.so.6.1` etc.,
 plus static archives), the server (static), and xdpyinfo, xclock, xlogo,
-xset, xlsfonts, xfd, xrdb, xauth, xdm,
-xterm, resize, twm and xsetroot (15-200 KB each). `work/dist/usr/x11r6` is the
+xset, xlsfonts, xfd, xrdb, xauth, xdm, xwd,
+xterm (XFree86 3.3.6's, with colours; R6.3's as xterm-r63), resize, twm and
+xsetroot (15-250 KB each). `work/dist/usr/x11r6` is the
 install tree. The clients carry an RPATH of `/usr/x11r6/lib`, so the
 system's X11R4 `libX11.so` and friends in `/usr/lib` are left alone.
 
@@ -148,6 +149,53 @@ session was R6.3 end to end: `xsetroot`, `twm`, `xterm` (typing, with
 `$TERM` passed to the shell), `xclock` and `xlogo`. `xdpyinfo` reports
 vendor release 6300. The system's R4 clients and a modern `xlogo` from the
 PC also work against the server.
+
+## xterm with colours: XFree86 3.3.6's
+
+R6.3's xterm has no ANSI colours: they came with XFree86's xterm. `build.sh`
+builds XFree86 3.3.6's (XFree86 3.3 was based on R6.3, so its xterm drops
+into this tree) as `xterm`, and keeps R6.3's as `xterm-r63`. The source is
+`X336src-1.tgz` from ftp.xfree86.org, pinned by SHA-256. That hash was
+checked against the copy inside Debian's archived `xfree86-1` 3.3.6 source,
+which snapshot.debian.org serves over HTTPS; ftp.xfree86.org has only HTTP.
+
+What it took (`xterm-quote-includes.py`, then `patches/xterm-xf86-asv.patch`):
+
+- xterm's own headers are included with quotes. It writes `#include
+  <menu.h>`, and the cross compiler finds SVR4's curses `<menu.h>` first.
+- The same ASV changes as R6.3's xterm: no utmp, `environ` as `_environ`,
+  and `ptem`/`ldterm`/`ttcompat` pushed only when missing.
+- `sigsetjmp` becomes `setjmp`. SVR4 hides `sigjmp_buf` from a strict ANSI
+  compiler, and ASV's shared libc has no `siglongjmp`. The one use is a
+  timeout in a `signal()` handler, which leaves nothing blocked.
+- No `setegid` in the shared libc: the saved-IDs code is off, since this
+  xterm isn't setuid.
+- The 16 colours are on without app-defaults. XFree86's `XTerm-color`
+  values are compiled in as `rgb:` numbers, so no colour database is
+  needed; resources still override them.
+- TERM is `xterm-xfree86` when the terminfo has it (the first name tried),
+  else `xterm` as before.
+
+The install tree has the app-defaults (`lib/X11/app-defaults/XTerm`,
+`XTerm-color`) and `lib/terminfo/xterm-xf86.ti`: XFree86's `xterm-xfree86`
+(alias `xterm-new`), `xterm-color`, `xterm-16color`, `xterm-vt220` and
+`xterm-r6`. Compile them once on the TT, as root:
+
+```
+tic /usr/x11r6/lib/terminfo/xterm-xf86.ti     # 4 warnings: meml/memu, harmless
+```
+
+The system's own `xterm` entry is not replaced, so the R4 and R6.3 xterms
+and anything else that says TERM=xterm behave as before. Anyone who
+telnets in from a colour terminal can use `TERM=xterm-color`.
+
+Three things that looked like bugs and weren't:
+- `xwd` of an idle display gives solid black. After 10 minutes the screen
+  saver covers the screen with a black window; `xset s reset` wakes it.
+- The system's R4 `xwd` can't open `:0` (see ../xserver); `build.sh`
+  builds R6.3's.
+- xterm ignores SIGTERM on System V, so that the shell's process group
+  can't kill it. Close it from the window manager, or send SIGKILL.
 
 ## Why a shadow sysroot
 
